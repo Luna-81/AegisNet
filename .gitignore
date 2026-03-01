@@ -1,0 +1,40 @@
+cat << 'EOF' > .gitignore
+# ==============================
+# AegisNet C++ .gitignore
+# ==============================
+
+# 1. 编译产生的中间文件
+*.o
+*.a
+*.so
+*.d
+
+# 2. CMake 产生的构建目录和缓存 (极其重要！)
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+compile_commands.json
+
+# 3. 最终生成的可执行程序 (不要把几十MB的二进制传上去)
+*.out
+*.exe
+example/WebChatServer
+example/EchoServer
+
+# 4. IDE 配置文件 (比如 CLion, VSCode 的配置)
+.idea/
+.vscode/
+
+# 5. 系统垃圾和运行日志
+.DS_Store
+*.log
+*.swp
+
+# 6. Python 虚拟环境 (防止把你的 .venv 传上去)
+.venv/
+venv/
+__pycache__/
+EOF
