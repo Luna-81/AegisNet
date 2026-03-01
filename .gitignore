@@ -1,40 +1,50 @@
 cat << 'EOF' > .gitignore
-# ==============================
-# AegisNet C++ .gitignore
-# ==============================
-
-# 1. 编译产生的中间文件
-*.o
-*.a
-*.so
-*.d
-
-# 2. CMake 产生的构建目录和缓存 (极其重要！)
+# === 编译与构建输出 ===
 build/
-cmake-build-*/
+bin/
+lib/
+out/
+dist/
+# 忽略 CMake 自动生成的中间文件
 CMakeCache.txt
 CMakeFiles/
-Makefile
 cmake_install.cmake
-compile_commands.json
+Makefile
+cmake_build_debug/
+cmake_build_release/
 
-# 3. 最终生成的可执行程序 (不要把几十MB的二进制传上去)
-*.out
+# === 目标可执行文件 ===
+# 这里添加你 CMakeLists.txt 中 add_executable 定义的名字
+AegisNetServer
 *.exe
-example/WebChatServer
-example/EchoServer
+*.out
+*.app
 
-# 4. IDE 配置文件 (比如 CLion, VSCode 的配置)
+# === IDE 与编辑器相关 ===
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (CLion / PyCharm)
 .idea/
-.vscode/
 
-# 5. 系统垃圾和运行日志
-.DS_Store
-*.log
+# Vim 临时文件
 *.swp
+*.swo
+*~
 
-# 6. Python 虚拟环境 (防止把你的 .venv 传上去)
-.venv/
-venv/
-__pycache__/
+# === 系统与日志文件 ===
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# === 静态分析与调试 ===
+*.gcov
+*.gcda
+*.gcno
 EOF
