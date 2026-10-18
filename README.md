@@ -164,4 +164,4 @@ cmake --build build/asan -j4
 ctest --test-dir build/asan --output-on-failure
 ```
 
-The tests cover Buffer operations, complete and fragmented HTTP GET/POST requests, malformed request lines and headers, invalid or ambiguous body-length metadata, pipelined requests, and a TCP connection round trip over a local socket pair. HTTP transfer-encoding is rejected because chunked request bodies are not implemented.
+The tests cover Buffer operations, complete and fragmented HTTP GET/POST requests, malformed request lines and headers, invalid or ambiguous body-length metadata, pipelined requests, a TCP connection round trip, and queued connection operations during teardown over local socket pairs. HTTP transfer-encoding is rejected because chunked request bodies are not implemented.
