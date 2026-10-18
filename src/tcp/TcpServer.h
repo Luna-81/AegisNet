@@ -43,10 +43,6 @@ class TcpServer : noncopyable {
 
     void newConnection(int sockfd, const InetAddress &peerAddr);
 
-    void removeConnection(const TcpConnectionPtr &conn);
-
-    void removeConnectionInLoop(const TcpConnectionPtr &conn);
-
     using ConnectionMap = std::map<std::string, TcpConnectionPtr>;
 
     EventLoop *loop_;
@@ -63,5 +59,5 @@ class TcpServer : noncopyable {
 
     std::atomic_int started_;
     int nextConnId_;
-    ConnectionMap connections_;
+    std::shared_ptr<ConnectionMap> connections_;
 };
