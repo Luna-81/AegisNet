@@ -77,8 +77,7 @@ const char* g_chat_html = R"(
 class WebChatServer {
 public:
     WebChatServer(EventLoop* loop, const InetAddress& listenAddr)
-        : server_(loop, listenAddr, "WebChatServer"),
-          loop_(loop)
+        : loop_(loop), server_(loop, listenAddr, "WebChatServer")
     {
 
         server_.setConnectionCallback(
@@ -88,8 +87,6 @@ public:
             std::bind(&WebChatServer::onMessage, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
         server_.setThreadNum(4);
-
-        loop_->runEvery(5.0, std::bind(&WebChatServer::checkIdleConnections, this));
     }
 
     void start() {
@@ -98,18 +95,29 @@ public:
 
 private:
     void onConnection(const TcpConnectionPtr& conn) {
+        TimerId idleTimer = 0;
+        TimerId forceCloseTimer = 0;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (conn->connected()) {
                 LOG_INFO << "✅ [New User] " << conn->peerAddress().toIpPort() << " online.";
                 connections_.insert(conn);
-                lastActiveTime_[conn] = Timestamp::now();
+                idleTimers_[conn] = ConnectionTimers{};
             } else {
                 LOG_INFO << "❌ [User Left] " << conn->peerAddress().toIpPort() << " offline.";
                 connections_.erase(conn);
-                lastActiveTime_.erase(conn);
+                const auto timers = idleTimers_.find(conn);
+                if (timers != idleTimers_.end()) {
+                    idleTimer = timers->second.idleTimer;
+                    forceCloseTimer = timers->second.forceCloseTimer;
+                    idleTimers_.erase(timers);
+                }
             }
         }
+
+        if (idleTimer != 0) conn->getLoop()->cancel(idleTimer);
+        if (forceCloseTimer != 0) conn->getLoop()->cancel(forceCloseTimer);
+        if (conn->connected()) refreshIdleTimer(conn);
 
         {
             std::lock_guard<std::mutex> lock(parserMutex_);
@@ -121,12 +129,8 @@ private:
         }
     }
 
-    void onMessage(const TcpConnectionPtr& conn, Buffer* buf, Timestamp receiveTime) {
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            lastActiveTime_[conn] = Timestamp::now();
-        }
+    void onMessage(const TcpConnectionPtr& conn, Buffer* buf, Timestamp) {
+        if (conn->connected()) refreshIdleTimer(conn);
 
         // Keep parser state per connection so split requests survive callbacks.
         std::vector<std::pair<std::string, std::string>> requests;
@@ -180,36 +184,52 @@ private:
         }
     }
 
-    void checkIdleConnections() {
-        Timestamp now = Timestamp::now();
-        std::vector<TcpConnectionPtr> toShutdown;
-        std::vector<TcpConnectionPtr> toForceClose;
+    struct ConnectionTimers {
+        TimerId idleTimer = 0;
+        TimerId forceCloseTimer = 0;
+    };
 
+    void refreshIdleTimer(const TcpConnectionPtr& conn) {
+        if (!conn->connected()) return;
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto state = idleTimers_.find(conn);
+        if (state == idleTimers_.end()) return;
+
+        if (state->second.idleTimer != 0) {
+            conn->getLoop()->cancel(state->second.idleTimer);
+        }
+        state->second.idleTimer = conn->getLoop()->runAfter(
+            15.0, [this, conn]() { handleIdleTimeout(conn); });
+    }
+
+    void handleIdleTimeout(const TcpConnectionPtr& conn) {
+        if (!conn->connected()) return;
+
+        LOG_INFO << "Connection idle for 15 seconds; starting graceful shutdown: "
+                 << conn->peerAddress().toIpPort();
+        conn->shutdown();
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto state = idleTimers_.find(conn);
+        if (state == idleTimers_.end()) return;
+        state->second.idleTimer = 0;
+        state->second.forceCloseTimer = conn->getLoop()->runAfter(
+            15.0, [this, conn]() { handleForceCloseTimeout(conn); });
+    }
+
+    void handleForceCloseTimeout(const TcpConnectionPtr& conn) {
         {
-
             std::lock_guard<std::mutex> lock(mutex_);
-            for (auto const& [conn, lastTime] : lastActiveTime_) {
-                int64_t idleMicroSeconds = now.microSecondsSinceEpoch() - lastTime.microSecondsSinceEpoch();
-
-                if (idleMicroSeconds > 30.0 * Timestamp::kMicroSecondsPerSecond) {
-                    toForceClose.push_back(conn);
-                }
-
-                else if (idleMicroSeconds > 15.0 * Timestamp::kMicroSecondsPerSecond) {
-                    toShutdown.push_back(conn);
-                }
-            }
+            const auto state = idleTimers_.find(conn);
+            if (state == idleTimers_.end()) return;
+            state->second.forceCloseTimer = 0;
         }
 
-        for (auto& conn : toShutdown) {
-            if (conn->connected()) {
-                LOG_INFO << "⚠️ 连接空闲超过 15 秒，触发半关闭(优雅挥手): " << conn->peerAddress().toIpPort();
-                conn->shutdown();
-            }
-        }
-
-        for (auto& conn : toForceClose) {
-            LOG_ERROR << "💀 超过 30 秒未响应，拔网线强制踢出: " << conn->peerAddress().toIpPort();
+        if (!conn->disconnected()) {
+            LOG_INFO << "Connection did not close within 15 seconds after shutdown; "
+                        "forcing close: "
+                     << conn->peerAddress().toIpPort();
             conn->forceClose();
         }
     }
@@ -225,13 +245,14 @@ private:
         conn->send(response);
     }
 
-    TcpServer server_;
     EventLoop* loop_;
     std::mutex mutex_;
     std::mutex parserMutex_;
     std::set<TcpConnectionPtr> connections_;
-    std::map<TcpConnectionPtr, Timestamp> lastActiveTime_;
+    std::map<TcpConnectionPtr, ConnectionTimers> idleTimers_;
     std::map<TcpConnectionPtr, HttpParser> parsers_;
+    // Destroy worker loops before the state used by their callbacks.
+    TcpServer server_;
 };
 
 // ========================================================
