@@ -18,6 +18,8 @@ class Socket;
 class TcpConnection : noncopyable,
                       public std::enable_shared_from_this<TcpConnection> {
    public:
+    static constexpr size_t kDefaultLowWaterMark = 32U * 1024U * 1024U;
+    static constexpr size_t kDefaultHighWaterMark = 64U * 1024U * 1024U;
 
     TcpConnection(EventLoop* loop, const std::string& name, int sockfd,
                   const InetAddress& localAddr, const InetAddress& peerAddr);
@@ -47,6 +49,9 @@ class TcpConnection : noncopyable,
     void setWriteCompleteCallback(const WriteCompleteCallback& cb) {
         writeCompleteCallback_ = cb;
     }
+    void setOutputBufferWatermarks(size_t lowWaterMark, size_t highWaterMark,
+                                   const WaterMarkCallback& lowCallback,
+                                   const WaterMarkCallback& highCallback);
     void setCloseCallback(const CloseCallback& cb) { closeCallback_ = cb; }
 
     void connectEstablished();
@@ -80,11 +85,13 @@ class TcpConnection : noncopyable,
     int fileFd_ = -1;
     size_t fileSize_ = 0;
     off_t fileOffset_ = 0;
+    size_t lowWaterMark_ = kDefaultLowWaterMark;
+    size_t highWaterMark_ = kDefaultHighWaterMark;
+    bool aboveHighWaterMark_ = false;
 
     EventLoop* loop_;
     const std::string name_;
     std::atomic<StateE> state_;
-    bool reading_;
 
     std::unique_ptr<Socket> socket_;
     std::unique_ptr<Channel> channel_;
@@ -95,6 +102,8 @@ class TcpConnection : noncopyable,
     ConnectionCallback connectionCallback_;
     MessageCallback messageCallback_;
     WriteCompleteCallback writeCompleteCallback_;
+    WaterMarkCallback lowWaterMarkCallback_;
+    WaterMarkCallback highWaterMarkCallback_;
     CloseCallback closeCallback_;
 
     Buffer inputBuffer_;

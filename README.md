@@ -164,4 +164,6 @@ cmake --build build/asan -j4
 ctest --test-dir build/asan --output-on-failure
 ```
 
-The tests cover Buffer operations, complete and fragmented HTTP GET/POST requests, malformed request lines and headers, invalid or ambiguous body-length metadata, pipelined requests, and a TCP connection round trip over a local socket pair. HTTP transfer-encoding is rejected because chunked request bodies are not implemented.
+The channel uses level-triggered epoll for both read and write readiness. `TcpConnection::setOutputBufferWatermarks` provides low- and high-water callbacks so producers can pause when queued output grows and resume as it drains. The defaults are 32 MiB and 64 MiB; applications can configure lower thresholds for their workload.
+
+The tests cover Buffer operations, complete and fragmented HTTP requests, malformed input, pipelining, event-mode consistency, TCP round trips, and output-buffer high/low watermark transitions over local socket pairs. HTTP transfer-encoding is rejected because chunked request bodies are not implemented.
