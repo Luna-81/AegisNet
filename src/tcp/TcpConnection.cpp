@@ -180,7 +180,9 @@ void TcpConnection::send(const std::string &buf) {
         if (loop_->isInLoopThread()) {
             sendInLoop(buf);
         } else {
-            loop_->runInLoop(std::bind(&TcpConnection::sendInLoop, this, buf));
+            // Keep the connection alive until the queued loop task completes.
+            auto self = shared_from_this();
+            loop_->runInLoop([self, buf]() { self->sendInLoop(buf); });
         }
     }
 }
@@ -235,8 +237,9 @@ void TcpConnection::sendFile(int fd, size_t fileSize) {
         if (loop_->isInLoopThread()) {
             sendFileInLoop(fd, fileSize);
         } else {
+            auto self = shared_from_this();
             loop_->runInLoop(
-                std::bind(&TcpConnection::sendFileInLoop, this, fd, fileSize));
+                [self, fd, fileSize]() { self->sendFileInLoop(fd, fileSize); });
         }
     }
 }
@@ -296,7 +299,8 @@ void TcpConnection::handleError() {
 void TcpConnection::shutdown() {
     if (state_ == kConnected) {
         setState(kDisconnecting);
-        loop_->runInLoop(std::bind(&TcpConnection::shutdownInLoop, this));
+        auto self = shared_from_this();
+        loop_->runInLoop([self]() { self->shutdownInLoop(); });
     }
 }
 

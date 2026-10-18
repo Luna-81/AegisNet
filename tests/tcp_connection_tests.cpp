@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 
 int main() {
     int sockets[2];
@@ -53,6 +54,44 @@ int main() {
 
     if (!requestSent || !receivedRequest || !responseMatches) {
         std::fprintf(stderr, "TCP connection round trip failed\n");
+        return 1;
+    }
+
+    int queuedSockets[2];
+    if (::socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0,
+                     queuedSockets) < 0) {
+        std::perror("socketpair");
+        return 1;
+    }
+
+    auto queuedConnection = std::make_shared<TcpConnection>(
+        &loop, "queued-lifetime-test", queuedSockets[0], InetAddress(),
+        InetAddress());
+    queuedConnection->setConnectionCallback([](const TcpConnectionPtr&) {});
+    queuedConnection->connectEstablished();
+    const int queuedFile = ::dup(queuedSockets[1]);
+    if (queuedFile < 0) {
+        std::perror("dup");
+        return 1;
+    }
+
+    std::thread submitter([&loop, &queuedConnection, queuedFile]() {
+        loop.queueInLoop([&queuedConnection]() {
+            queuedConnection->connectDestroyed();
+            queuedConnection.reset();
+        });
+        queuedConnection->send("queued after close");
+        queuedConnection->sendFile(queuedFile, 1);
+        queuedConnection->shutdown();
+    });
+    submitter.join();
+
+    loop.queueInLoop([&loop]() { loop.quit(); });
+    loop.loop();
+
+    ::close(queuedSockets[1]);
+    if (queuedConnection) {
+        std::fprintf(stderr, "queued TcpConnection was not released\n");
         return 1;
     }
 }
