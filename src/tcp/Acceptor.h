@@ -10,7 +10,7 @@ class InetAddress;
 
 class Acceptor : noncopyable {
    public:
-    // 定义回调：当有新连接时，Acceptor 把 (connfd, peerAddr) 传给 TcpServer
+
     using NewConnectionCallback =
         std::function<void(int sockfd, const InetAddress&)>;
 
@@ -25,7 +25,7 @@ class Acceptor : noncopyable {
     void listen();
 
    private:
-    void handleRead(Timestamp receiveTime);  // 内部处理读事件（即调用 accept）
+    void handleRead(Timestamp receiveTime);
 
     EventLoop* loop_;
     Socket acceptSocket_;

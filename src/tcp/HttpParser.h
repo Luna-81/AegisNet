@@ -5,8 +5,9 @@
 #pragma once
 #include <string>
 #include <map>
-#include "Buffer.h" // 引用你之前写的 Buffer 类
+#include "Buffer.h"
 
+// A parser instance retains progress across calls; keep it with its connection.
 class HttpParser {
 public:
     enum HttpRequestParseState {
@@ -14,12 +15,13 @@ public:
         ExpectHeaders,
         ExpectBody,
         GotAll,
+        Error,
     };
 
-    HttpParser() : state_(ExpectRequestLine) {}
+    HttpParser() : state_(ExpectRequestLine), expectedBodyLength_(0) {}
 
-    // 解析入口
     bool parseRequest(Buffer* buf);
+    void reset();
 
     bool gotAll() const { return state_ == GotAll; }
 
@@ -37,4 +39,5 @@ private:
     std::string version_;
     std::map<std::string, std::string> headers_;
     std::string body_;
+    size_t expectedBodyLength_;
 };
