@@ -164,4 +164,4 @@ cmake --build build/asan -j4
 ctest --test-dir build/asan --output-on-failure
 ```
 
-The initial tests cover Buffer operations, complete HTTP GET and POST requests, and a TCP connection round trip over a local socket pair. Fragmented requests, malformed input, and pipelined requests remain future parser regression cases.
+The tests cover Buffer operations, complete and fragmented HTTP GET/POST requests, malformed request lines and headers, invalid or ambiguous body-length metadata, pipelined requests, and a TCP connection round trip over a local socket pair. HTTP transfer-encoding is rejected because chunked request bodies are not implemented.

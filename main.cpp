@@ -13,6 +13,7 @@
 #include <map>
 #include <mutex>
 #include <csignal>
+#include <vector>
 #include <unistd.h>  // 🔥 getpid
 #include <functional>
 
@@ -97,15 +98,26 @@ public:
 
 private:
     void onConnection(const TcpConnectionPtr& conn) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (conn->connected()) {
-            LOG_INFO << "✅ [New User] " << conn->peerAddress().toIpPort() << " online.";
-            connections_.insert(conn);
-            lastActiveTime_[conn] = Timestamp::now();
-        } else {
-            LOG_INFO << "❌ [User Left] " << conn->peerAddress().toIpPort() << " offline.";
-            connections_.erase(conn);
-            lastActiveTime_.erase(conn);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (conn->connected()) {
+                LOG_INFO << "✅ [New User] " << conn->peerAddress().toIpPort() << " online.";
+                connections_.insert(conn);
+                lastActiveTime_[conn] = Timestamp::now();
+            } else {
+                LOG_INFO << "❌ [User Left] " << conn->peerAddress().toIpPort() << " offline.";
+                connections_.erase(conn);
+                lastActiveTime_.erase(conn);
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(parserMutex_);
+            if (conn->connected()) {
+                parsers_.try_emplace(conn);
+            } else {
+                parsers_.erase(conn);
+            }
         }
     }
 
@@ -116,16 +128,40 @@ private:
             lastActiveTime_[conn] = Timestamp::now();
         }
 
-        HttpParser parser;
-        if (parser.parseRequest(buf)) {
-            const std::string& path = parser.getPath();
+        // Keep parser state per connection so split requests survive callbacks.
+        std::vector<std::pair<std::string, std::string>> requests;
+        bool malformedRequest = false;
+        {
+            std::lock_guard<std::mutex> lock(parserMutex_);
+            HttpParser& parser = parsers_[conn];
 
+            while (true) {
+                if (!parser.parseRequest(buf)) {
+                    malformedRequest = true;
+                    break;
+                }
+                if (!parser.gotAll()) break;
+
+                requests.emplace_back(parser.getPath(), parser.getBody());
+                parser.reset();
+                if (buf->readableBytes() == 0) break;
+            }
+        }
+
+        if (malformedRequest) {
+            conn->send("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            conn->shutdown();
+            return;
+        }
+
+        for (const auto& request : requests) {
+            const std::string& path = request.first;
             if (path == "/") {
                 LOG_INFO << "📄 " << conn->peerAddress().toIpPort() << " requested Chat UI.";
                 sendHttpResponse(conn, "text/html; charset=utf-8", g_chat_html);
             }
             else if (path == "/chat") {
-                std::string msg = parser.getBody();
+                const std::string& msg = request.second;
                 LOG_INFO << "💬 [" << conn->peerAddress().toIpPort() << "] says: " << msg;
 
                 std::string broadcastMsg = "[" + conn->peerAddress().toIpPort() + "]: " + msg;
@@ -192,8 +228,10 @@ private:
     TcpServer server_;
     EventLoop* loop_;
     std::mutex mutex_;
+    std::mutex parserMutex_;
     std::set<TcpConnectionPtr> connections_;
     std::map<TcpConnectionPtr, Timestamp> lastActiveTime_;
+    std::map<TcpConnectionPtr, HttpParser> parsers_;
 };
 
 // ========================================================

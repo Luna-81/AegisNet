@@ -15,11 +15,13 @@ public:
         ExpectHeaders,
         ExpectBody,
         GotAll,
+        Error,
     };
 
-    HttpParser() : state_(ExpectRequestLine) {}
+    HttpParser() : state_(ExpectRequestLine), expectedBodyLength_(0) {}
 
     bool parseRequest(Buffer* buf);
+    void reset();
 
     bool gotAll() const { return state_ == GotAll; }
 
@@ -37,4 +39,5 @@ private:
     std::string version_;
     std::map<std::string, std::string> headers_;
     std::string body_;
+    size_t expectedBodyLength_;
 };
