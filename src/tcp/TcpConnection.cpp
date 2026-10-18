@@ -49,6 +49,17 @@ TcpConnection::~TcpConnection() {
 
 int TcpConnection::getFd() const { return channel_->getFd(); }
 
+void TcpConnection::setOutputBufferWatermarks(
+    size_t lowWaterMark, size_t highWaterMark,
+    const WaterMarkCallback& lowCallback,
+    const WaterMarkCallback& highCallback) {
+    assert(lowWaterMark < highWaterMark);
+    lowWaterMark_ = lowWaterMark;
+    highWaterMark_ = highWaterMark;
+    lowWaterMarkCallback_ = lowCallback;
+    highWaterMarkCallback_ = highCallback;
+}
+
 void TcpConnection::connectEstablished() {
     loop_->assertInLoopThread();
     assert(state_ == kConnecting);
@@ -103,6 +114,15 @@ void TcpConnection::handleWrite() {
         } else if (n < 0 && errno != EAGAIN) {
             LOG_ERROR << "TcpConnection::handleWrite write outputBuffer error";
             return;
+        }
+    }
+
+    const size_t queuedBytes = outputBuffer_.readableBytes();
+    if (aboveHighWaterMark_ && queuedBytes <= lowWaterMark_) {
+        aboveHighWaterMark_ = false;
+        if (lowWaterMarkCallback_) {
+            loop_->queueInLoop(std::bind(lowWaterMarkCallback_, shared_from_this(),
+                                         queuedBytes));
         }
     }
 
@@ -198,6 +218,14 @@ void TcpConnection::sendInLoop(const std::string &message) {
 
     if (!faultError && remaining > 0) {
         outputBuffer_.append(message.data() + nwrote, remaining);
+        const size_t queuedBytes = outputBuffer_.readableBytes();
+        if (!aboveHighWaterMark_ && queuedBytes >= highWaterMark_) {
+            aboveHighWaterMark_ = true;
+            if (highWaterMarkCallback_) {
+                loop_->queueInLoop(std::bind(highWaterMarkCallback_,
+                                             shared_from_this(), queuedBytes));
+            }
+        }
         if (!channel_->isWriting()) {
             channel_->enableWriting();
         }

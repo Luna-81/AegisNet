@@ -7,7 +7,7 @@
 #include "../base/Timestamp.h"
 class EventLoop;
 
-// Associates one file descriptor with its epoll events and callbacks.
+// Associates one file descriptor with callbacks using level-triggered epoll.
 class Channel {
    public:
     using EventCallback = std::function<void()>;
@@ -37,7 +37,7 @@ class Channel {
         update();
     }
     void enableWriting() {
-        events_ |= EPOLLOUT | EPOLLET;
+        events_ |= EPOLLOUT;
         update();
     }
     void disableWriting() {
