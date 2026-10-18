@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include "../base/Logger.h"
 #include "../base/Timestamp.h"
@@ -139,7 +140,15 @@ void EventLoop::doPendingFunctors() {
     callingPendingFunctors_ = false;
 }
 
-void EventLoop::runEvery(double interval, std::function<void()> cb) {
+TimerId EventLoop::runAfter(double delay, std::function<void()> cb) {
+    return timerQueue_->addTimer(std::move(cb), delay, 0.0);
+}
 
-    timerQueue_->addTimer(std::move(cb), Timestamp::now(), interval);
+TimerId EventLoop::runEvery(double interval, std::function<void()> cb) {
+    if (!std::isfinite(interval) || interval <= 0.0) return 0;
+    return timerQueue_->addTimer(std::move(cb), interval, interval);
+}
+
+void EventLoop::cancel(TimerId timerId) {
+    timerQueue_->cancel(timerId);
 }

@@ -46,7 +46,11 @@ class EventLoop : noncopyable {
     // Thread-safe task submission; queued work runs on this loop's thread.
     void queueInLoop(Functor cb);
 
-    void runEvery(double interval, std::function<void()> cb);
+    // Schedule relative to the monotonic clock; calls are safe from any thread.
+    TimerId runAfter(double delay, std::function<void()> cb);
+    // The first callback runs after one full interval.
+    TimerId runEvery(double interval, std::function<void()> cb);
+    void cancel(TimerId timerId);
 
    private:
 
