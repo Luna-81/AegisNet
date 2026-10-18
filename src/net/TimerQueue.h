@@ -1,53 +1,19 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <functional>
+#include <map>
+#include <memory>
 #include <set>
-#include <vector>
 
-#include "../base/Timestamp.h"
 #include "Channel.h"
 
 class EventLoop;
 
-// Stores a callback and its next expiration time.
-class Timer {
-   public:
-    using TimerCallback = std::function<void()>;
-    Timer(TimerCallback cb, Timestamp when, double interval)
-        : callback_(std::move(cb)),
-          expiration_(when),
-          interval_(interval),
-          repeat_(interval > 0.0),
-          canceled_(false) {}
-    void run() const {
-        if (!canceled_) callback_();
-    }
-    Timestamp expiration() const { return expiration_; }
-    bool repeat() const { return repeat_; }
+using TimerId = uint64_t;
 
-    void restart(Timestamp now) {
-        if (repeat_) {
-
-            expiration_ = addTime(now, interval_);
-        } else {
-
-            expiration_ = Timestamp();
-        }
-    }
-
-    void cancel() { canceled_ = true; }
-    bool isCanceled() const { return canceled_; }
-
-   private:
-    const TimerCallback callback_;
-    Timestamp expiration_;
-    const double interval_;
-    const bool repeat_;
-
-    bool canceled_;
-};
-
-// Runs expired timer callbacks from the owning EventLoop.
+// Owns timers scheduled on one EventLoop and dispatches their callbacks there.
 class TimerQueue {
    public:
     using TimerCallback = std::function<void()>;
@@ -55,22 +21,23 @@ class TimerQueue {
     explicit TimerQueue(EventLoop* loop);
     ~TimerQueue();
 
-    void addTimer(TimerCallback cb, Timestamp when, double interval);
+    // Returns zero for invalid arguments; nonzero IDs can be canceled later.
+    TimerId addTimer(TimerCallback cb, double delay, double interval);
+    void cancel(TimerId timerId);
 
    private:
+    struct Timer;
+    using Entry = std::pair<int64_t, std::shared_ptr<Timer>>;
 
+    void addTimerInLoop(const std::shared_ptr<Timer>& timer, double delay);
+    void cancelInLoop(TimerId timerId);
     void handleRead();
-
-    std::vector<Timer*> getExpired(Timestamp now);
-
-    void resetTimerfd(int timerfd, Timestamp expiration);
-
-    bool insert(Timer* timer);
+    void resetTimerfd(int64_t expiration);
 
     EventLoop* loop_;
     const int timerfd_;
     Channel timerfdChannel_;
-
-    using Entry = std::pair<Timestamp, Timer*>;
+    std::atomic<TimerId> nextTimerId_{1};
     std::set<Entry> timers_;
+    std::map<TimerId, std::shared_ptr<Timer>> activeTimers_;
 };
