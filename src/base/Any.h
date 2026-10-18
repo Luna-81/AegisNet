@@ -12,18 +12,14 @@ class Any {
    public:
     Any() : content_(nullptr) {}
 
-    // 模板构造函数：可以接收任何类型的变量
     template <typename ValueType>
     Any(const ValueType& value) : content_(new Holder<ValueType>(value)) {}
 
-    // 拷贝构造
     Any(const Any& other)
         : content_(other.content_ ? other.content_->clone() : nullptr) {}
 
-    // 移动构造
     Any(Any&& other) noexcept : content_(std::move(other.content_)) {}
 
-    // 赋值运算符
     Any& operator=(const Any& other) {
         Any(other).swap(*this);
         return *this;
@@ -37,7 +33,6 @@ class Any {
 
     void swap(Any& other) { std::swap(content_, other.content_); }
 
-    // 只有 Any 类内部能看到的基类
     class Placeholder {
        public:
         virtual ~Placeholder() {}
@@ -45,7 +40,6 @@ class Any {
         virtual Placeholder* clone() const = 0;
     };
 
-    // 存储具体数据的模板类
     template <typename ValueType>
     class Holder : public Placeholder {
        public:
@@ -58,14 +52,13 @@ class Any {
     };
 
    private:
-    // 关键：在这里用基类指针实现类型擦除
+
     template <typename ValueType>
     friend ValueType* any_cast(Any*);
 
     std::unique_ptr<Placeholder> content_;
 };
 
-// --- 全局转型函数 ---
 template <typename ValueType>
 ValueType* any_cast(Any* operand) {
     return (operand && operand->type() == typeid(ValueType))

@@ -36,10 +36,8 @@ class HttpResponse {
     }
     void setBody(const std::string& body) { body_ = body; }
 
-    // 核心：把对象转换成可以发送的 Buffer 字节流
     void appendToBuffer(Buffer* output) const;
 
-    // day16 🌟 新增：作为一个公开的静态工具函数
     static std::string getMimeType(const std::string& filepath);
 
    private:

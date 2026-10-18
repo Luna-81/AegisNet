@@ -9,10 +9,10 @@
 
 #include "noncopyable.h"
 
-// 专职负责写磁盘和日志滚动的管家
+// Writes log records to rolling files; callers serialize access to this object.
 class LogFile : noncopyable {
    public:
-    // 默认按照 50MB (50 * 1024 * 1024 bytes) 进行滚动切分
+
     LogFile(const std::string& basename, size_t rollSize = 50 * 1024 * 1024);
     ~LogFile();
 
@@ -20,13 +20,13 @@ class LogFile : noncopyable {
     void flush();
 
    private:
-    void rollFile();  // 触发滚动的核心动作
+    void rollFile();
     static std::string getLogFileName(const std::string& basename);
 
     const std::string basename_;
     const size_t rollSize_;
-    size_t writtenBytes_;  // 记录当前文件已经写了多少字节
+    size_t writtenBytes_;
     FILE* fp_;
 
-    int lastDay_;  // 新增：记录当前文件是哪一天的 (1~31)
+    int lastDay_;
 };

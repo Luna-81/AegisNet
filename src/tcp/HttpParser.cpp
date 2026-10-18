@@ -28,7 +28,7 @@ bool HttpParser::parseRequest(Buffer* buf) {
                 if (colon != crlf) {
                     headers_[std::string(buf->peek(), colon)] = std::string(colon + 2, crlf);
                 } else {
-                    // 空行，表示 Header 结束
+
                     if (headers_.count("Content-Length")) {
                         state_ = ExpectBody;
                     } else {

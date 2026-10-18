@@ -11,15 +11,15 @@ Thread::Thread(ThreadFunc func, const std::string &name)
 
 Thread::~Thread() {
     if (started_ && !joined_) {
-        thread_->detach();  // 🔥 修复崩溃：如果没 join，析构时自动 detach
+        thread_->detach();
     }
 }
 
 void Thread::start() {
     started_ = true;
-    // 使用 lambda 启动线程
+
     thread_ = std::make_shared<std::thread>([this]() {
-        // 这里可以加上获取 tid 的逻辑
+
         func_();
     });
 }
