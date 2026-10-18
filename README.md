@@ -146,5 +146,22 @@ make -j4
 curl [http://127.0.0.1:8888/api/status](http://127.0.0.1:8888/api/status)
 ```
 
+## Tests
 
+Build and run the unit tests with CTest:
 
+```bash
+cmake -S . -B build/debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/debug -j4
+ctest --test-dir build/debug --output-on-failure
+```
+
+Enable AddressSanitizer and UndefinedBehaviorSanitizer with:
+
+```bash
+cmake -S . -B build/asan -DCMAKE_BUILD_TYPE=Debug -DAEGISNET_ENABLE_SANITIZERS=ON
+cmake --build build/asan -j4
+ctest --test-dir build/asan --output-on-failure
+```
+
+The initial tests cover Buffer operations, complete HTTP GET and POST requests, and a TCP connection round trip over a local socket pair. Fragmented requests, malformed input, and pipelined requests remain future parser regression cases.

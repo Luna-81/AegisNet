@@ -1,21 +1,14 @@
-# 1. 声明要求的最低 CMake 版本
 cmake_minimum_required(VERSION 3.10)
 
-# 2. 声明项目名称、版本号及使用的语言
 project(AegisNet VERSION 1.0.0 LANGUAGES CXX)
 
-# 3. 🎯 核心设置：强制使用 C++17 标准
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# 4. 开启最高级别的编译器警告
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -g -O2 -pthread")
+find_package(Threads REQUIRED)
+include(CTest)
 
-# 5. 告诉编译器去哪里找头文件
-include_directories(${CMAKE_SOURCE_DIR})
-
-# 6. 🎯 收集 src 目录下的所有源文件
 file(GLOB_RECURSE CORE_SOURCES
         "src/base/*.cpp"
         "src/net/*.cpp"
@@ -23,11 +16,43 @@ file(GLOB_RECURSE CORE_SOURCES
         "src/tcp/*.cpp"
 )
 
-# 7. 把核心代码编译成一个静态库
 add_library(aegisnet_core STATIC ${CORE_SOURCES})
+target_include_directories(aegisnet_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(aegisnet_core PRIVATE -Wall -Wextra)
+target_link_libraries(aegisnet_core PUBLIC Threads::Threads)
 
-# 8. 🎯 编译根目录下的 main.cpp
 add_executable(AegisNetServer main.cpp)
+target_link_libraries(AegisNetServer PRIVATE aegisnet_core)
 
-# 9. 链接核心库和多线程库
-target_link_libraries(AegisNetServer aegisnet_core pthread)
+option(AEGISNET_ENABLE_SANITIZERS "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+function(aegisnet_enable_sanitizers target)
+    if(AEGISNET_ENABLE_SANITIZERS)
+        target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_libraries(${target} PRIVATE -fsanitize=address,undefined)
+    endif()
+endfunction()
+
+aegisnet_enable_sanitizers(aegisnet_core)
+aegisnet_enable_sanitizers(AegisNetServer)
+
+if(BUILD_TESTING)
+    # Keep fast unit tests available in both normal and sanitizer builds.
+    add_executable(buffer_tests tests/buffer_tests.cpp)
+    target_link_libraries(buffer_tests PRIVATE aegisnet_core)
+    target_compile_options(buffer_tests PRIVATE -Wall -Wextra)
+    aegisnet_enable_sanitizers(buffer_tests)
+    add_test(NAME buffer_tests COMMAND buffer_tests)
+
+    add_executable(http_parser_tests tests/http_parser_tests.cpp)
+    target_link_libraries(http_parser_tests PRIVATE aegisnet_core)
+    target_compile_options(http_parser_tests PRIVATE -Wall -Wextra)
+    aegisnet_enable_sanitizers(http_parser_tests)
+    add_test(NAME http_parser_tests COMMAND http_parser_tests)
+
+    add_executable(tcp_connection_tests tests/tcp_connection_tests.cpp)
+    target_link_libraries(tcp_connection_tests PRIVATE aegisnet_core)
+    target_compile_options(tcp_connection_tests PRIVATE -Wall -Wextra)
+    aegisnet_enable_sanitizers(tcp_connection_tests)
+    add_test(NAME tcp_connection_tests COMMAND tcp_connection_tests)
+endif()
