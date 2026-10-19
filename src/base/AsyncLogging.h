@@ -16,16 +16,16 @@
 
 #include "Singleton.h"
 
-// Buffers log records from producer threads for batched background writes.
+// Buffers log records from producer threads and drains them on stop.
 class AsyncLogging : public Singleton<AsyncLogging> {
 
     friend class Singleton<AsyncLogging>;
 
    public:
+    explicit AsyncLogging(const std::string& basename = "myserver_log",
+                          int flushInterval = 3);
     ~AsyncLogging() {
-        if (running_) {
-            stop();
-        }
+        stop();
     }
 
     void append(
@@ -33,14 +33,11 @@ class AsyncLogging : public Singleton<AsyncLogging> {
         int len);
 
     void start();
+    // Stops accepting buffered records, drains all accepted data, then joins.
     void
     stop();
 
    private:
-
-    AsyncLogging(const std::string& basename = "myserver_log",
-                 int flushInterval = 3);
-
     void threadFunc();
 
     using Buffer = FixedBuffer<
@@ -61,7 +58,9 @@ class AsyncLogging : public Singleton<AsyncLogging> {
 
     std::atomic<bool>
         running_;
+    bool started_ = false;
     Thread thread_;
+    std::once_flag joinOnce_;
 
     std::mutex mutex_;
     std::condition_variable
