@@ -30,7 +30,12 @@ Logger::Logger(const char* file, int line, LogLevel level)
     : file_(file), line_(line), level_(level) {
     time_t now = time(nullptr);
     char buf[64] = {0};
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    struct tm localTime {};
+    if (::localtime_r(&now, &localTime) != nullptr) {
+        strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &localTime);
+    } else {
+        std::snprintf(buf, sizeof(buf), "unknown-time");
+    }
 
     stream_ << "[" << buf << "] ";
 

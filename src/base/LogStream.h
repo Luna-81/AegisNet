@@ -6,7 +6,6 @@
 
 #include <cstring>
 #include <string>
-#include <vector>
 #include <string_view>
 
 #include "noncopyable.h"
@@ -24,11 +23,15 @@ class FixedBuffer : noncopyable {
     FixedBuffer() : cur_(data_) {}
     ~FixedBuffer() = default;
 
-    void append(const char* buf, size_t len) {
-        if (static_cast<size_t>(avail()) > len) {
+    bool append(const char* buf, size_t len) {
+        if (len > static_cast<size_t>(avail()) || (buf == nullptr && len != 0)) {
+            return false;
+        }
+        if (len != 0) {
             std::memcpy(cur_, buf, len);
             cur_ += len;
         }
+        return true;
     }
 
     const char* data() const {
@@ -42,7 +45,7 @@ class FixedBuffer : noncopyable {
         return static_cast<int>(end() - cur_);
     }
     void add(size_t len) {
-        cur_ += len;
+        if (len <= static_cast<size_t>(avail())) cur_ += len;
     }
 
     void reset() {
@@ -69,18 +72,18 @@ class LogStream : noncopyable {
     // operator<<
 
     LogStream& operator<<(bool v) {
-        buffer_.append(v ? "1" : "0", 1);
+        append(v ? "1" : "0", 1);
         return *this;
     }
     LogStream& operator<<(const char* str) {
         if (str)
-            buffer_.append(str, strlen(str));
+            append(str, strlen(str));
         else
-            buffer_.append("(null)", 6);
+            append("(null)", 6);
         return *this;
     }
     LogStream& operator<<(const std::string& v) {
-        buffer_.append(v.c_str(), v.size());
+        append(v.data(), v.size());
         return *this;
     }
 
@@ -88,7 +91,7 @@ class LogStream : noncopyable {
     LogStream& formatInteger(T v) {
         std::string str =
             std::to_string(v);  // For simplicity. Industrial uses custom itoa.
-        buffer_.append(str.c_str(), str.size());
+        append(str.c_str(), str.size());
         return *this;
     }
 
@@ -106,12 +109,12 @@ class LogStream : noncopyable {
 
     LogStream& operator<<(unsigned long v) { return formatInteger(v); }
     LogStream& operator<<(char v) {
-        buffer_.append(&v, 1);
+        append(&v, 1);
         return *this;
     }
 
     LogStream& operator<<(std::string_view v) {
-        buffer_.append(v.data(), v.size());
+        append(v.data(), v.size());
         return *this;
     }
 
@@ -121,10 +124,31 @@ class LogStream : noncopyable {
 
     void resetBuffer() {
         buffer_.reset();
+        truncated_ = false;
     }
 
    private:
+    void append(const char* data, size_t len) {
+        static constexpr char kTruncationMarker[] = " [truncated]\n";
+        static constexpr size_t markerLength = sizeof(kTruncationMarker) - 1;
+        if (truncated_ || len == 0) return;
+
+        const size_t available = static_cast<size_t>(buffer_.avail());
+        const size_t contentLimit = available > markerLength
+                                        ? available - markerLength
+                                        : 0;
+        if (len <= contentLimit) {
+            buffer_.append(data, len);
+            return;
+        }
+
+        if (contentLimit != 0) buffer_.append(data, contentLimit);
+        buffer_.append(kTruncationMarker, markerLength);
+        truncated_ = true;
+    }
+
     Buffer
         buffer_;
+    bool truncated_ = false;
 
 };

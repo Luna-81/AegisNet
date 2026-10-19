@@ -20,7 +20,7 @@ class LogFile : noncopyable {
     void flush();
 
    private:
-    void rollFile();
+    bool rollFile();
     static std::string getLogFileName(const std::string& basename);
 
     const std::string basename_;
@@ -28,5 +28,6 @@ class LogFile : noncopyable {
     size_t writtenBytes_;
     FILE* fp_;
 
-    int lastDay_;
+    int lastYear_;
+    int lastDayOfYear_;
 };
